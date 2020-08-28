@@ -113,12 +113,6 @@ class RetinaLoss(object):
 
             valid_reg_predicts = batch_reg_predict[pos_idx, :]
             gt_bbox = gt[pos_idx, 2:]
-            predicts_box = self.box_coder.decoder(valid_reg_predicts, all_anchors[pos_idx])
-            iou_loss = self.iou_loss(predicts_box, gt_bbox)
-            print(iou_loss)
-            print(iou_loss.shape)
-            print((iou_loss < 0).sum())
-
             delta_targets = self.box_coder.encoder(all_anchors[pos_idx], gt_bbox)
             reg_loss = smooth_l1_loss(valid_reg_predicts, delta_targets, beta=self.beta).sum()
             reg_loss_list.append(reg_loss)

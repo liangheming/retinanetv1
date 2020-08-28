@@ -12,11 +12,11 @@ from datasets.coco import COCODataSets
 from nets.retinanet import RetinaNet
 from losses.retina_loss import RetinaLoss
 from torch.utils.data.dataloader import DataLoader
-from utils.boxs import non_max_suppression
-from utils.model import rand_seed, is_parallel, ModelEMA, freeze_bn
+from utils.retinanet import non_max_suppression
+from commons.model_utils import rand_seed, is_parallel, ModelEMA, freeze_bn
 from metrics.map import coco_map
 from torch.nn.functional import interpolate
-from utils.optims import WarmUpCosineDecayMultiStepLRAdjust, split_optimizer
+from commons.optims_utils import WarmUpCosineDecayMultiStepLRAdjust, split_optimizer
 
 rand_seed(1024)
 

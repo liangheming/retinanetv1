@@ -2,6 +2,7 @@ import torch
 import math
 from torch import nn
 from nets.common import CR, FPN, CBR
+from utils.retinanet import BoxCoder
 
 default_anchor_sizes = [32., 64., 128., 256., 512.]
 default_strides = [8, 16, 32, 64, 128]
@@ -133,8 +134,7 @@ class RetinaHead(nn.Module):
         self.anchor_nums = len(self.anchor_scales) * len(self.anchor_ratios)
         self.scales = nn.ModuleList([Scale(init_val=1.0) for _ in range(self.layer_num)])
         self.anchors = [torch.zeros(size=(0, 4))] * self.layer_num
-        self.register_buffer("std", torch.tensor([0.1, 0.1, 0.2, 0.2]).float())
-
+        self.box_coder = BoxCoder()
         self.cls_head = RetinaClsHead(in_channel, inner_channel, self.anchor_nums, num_cls, num_convs)
         self.reg_head = RetinaRegHead(in_channel, inner_channel, self.anchor_nums, num_convs)
 
@@ -189,14 +189,7 @@ class RetinaHead(nn.Module):
         else:
             predicts_list = list()
             for cls_out, reg_out, anchor in zip(cls_outputs, reg_outputs, self.anchors):
-                anchor_wh = anchor[:, [2, 3]] - anchor[:, [0, 1]]
-                anchor_xy = anchor[:, [0, 1]] + 0.5 * anchor_wh
-                scale_reg = reg_out * self.std
-                scale_reg[..., :2] = anchor_xy + scale_reg[..., :2] * anchor_wh
-                scale_reg[..., 2:] = scale_reg[..., 2:].exp() * anchor_wh
-                scale_reg[..., :2] -= (0.5 * scale_reg[..., 2:])
-                scale_reg[..., 2:] = scale_reg[..., :2] + scale_reg[..., 2:]
-
+                scale_reg = self.box_coder.decoder(reg_out, anchor)
                 predicts_out = torch.cat([scale_reg, cls_out], dim=-1)
                 predicts_list.append(predicts_out)
             return predicts_list

@@ -6,7 +6,7 @@ data:
   train_img_root: /home/huffman/data/train2017
 #  train_img_root: /home/huffman/data/val2017
   val_img_root: /home/huffman/data/val2017
-  img_size: 640
+  img_size: 896
   use_crowd: False
   batch_size: 4
   num_workers: 4
@@ -18,8 +18,8 @@ model:
   anchor_sizes: [32, 64, 128, 256, 512]
 #  anchor_sizes: [26, 52, 104, 208, 416]
   strides: [8, 16, 32, 64, 128]
-  backbone: resnet50
-  backbone_weight: weights/resnet50.pth
+  backbone: resnet18
+  backbone_weight: weights/resnet18.pth
   freeze_bn: False
 
 hyper_params:
@@ -28,7 +28,7 @@ hyper_params:
   alpha: 0.25
   gamma: 2.0
   beta: 1./9
-  multi_scale: [640]
+  multi_scale: [896]
 
 optim:
   optimizer: Adam
@@ -48,4 +48,4 @@ val:
   iou_thresh: 0.5
   max_det: 300
 
-gpus: 0,1,2,3,4,5,6,7
+gpus: 4,5,6,7

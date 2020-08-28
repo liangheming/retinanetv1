@@ -1,5 +1,7 @@
 import torch
-from utils.boxs import box_iou
+from commons.boxs_utils import box_iou
+from utils.retinanet import BoxCoder
+from losses.commons import IOULoss
 
 
 def smooth_l1_loss(predicts, target, beta=1. / 9):
@@ -63,7 +65,8 @@ class RetinaLoss(object):
         self.gama = gamma
         self.beta = beta
         self.builder = RetinaLossBuilder(iou_thresh, ignore_thresh)
-        self.std = torch.tensor([0.1, 0.1, 0.2, 0.2]).float()
+        self.box_coder = BoxCoder()
+        self.iou_loss = IOULoss(iou_type="ciou")
 
     def __call__(self, cls_predicts, reg_predicts, anchors, targets):
         """
@@ -79,9 +82,6 @@ class RetinaLoss(object):
         device = cls_predicts[0].device
         bs = cls_predicts[0].shape[0]
         flags, gt_targets, all_anchors = self.builder(bs, anchors, targets)
-        anchors_wh = all_anchors[:, [2, 3]] - all_anchors[:, [0, 1]]
-        anchors_xy = all_anchors[:, [0, 1]] + 0.5 * anchors_wh
-        std = self.std.to(device)
         cls_loss_list = list()
         reg_loss_list = list()
 
@@ -113,16 +113,13 @@ class RetinaLoss(object):
 
             valid_reg_predicts = batch_reg_predict[pos_idx, :]
             gt_bbox = gt[pos_idx, 2:]
-            valid_anchor_wh = anchors_wh[pos_idx, :]
-            valid_anchor_xy = anchors_xy[pos_idx, :]
+            predicts_box = self.box_coder.decoder(valid_reg_predicts, all_anchors[pos_idx])
+            iou_loss = self.iou_loss(predicts_box, gt_bbox)
+            print(iou_loss)
+            print(iou_loss.shape)
+            print((iou_loss < 0).sum())
 
-            gt_wh = (gt_bbox[:, [2, 3]] - gt_bbox[:, [0, 1]]).clamp(min=1.0)
-            gt_xy = gt_bbox[:, [0, 1]] + 0.5 * gt_wh
-
-            delta_xy = (gt_xy - valid_anchor_xy) / valid_anchor_wh
-            delta_wh = (gt_wh / valid_anchor_wh).log()
-
-            delta_targets = torch.cat([delta_xy, delta_wh], dim=-1) / std
+            delta_targets = self.box_coder.encoder(all_anchors[pos_idx], gt_bbox)
             reg_loss = smooth_l1_loss(valid_reg_predicts, delta_targets, beta=self.beta).sum()
             reg_loss_list.append(reg_loss)
 

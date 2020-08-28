@@ -4,8 +4,8 @@ import cv2 as cv
 import numpy as np
 from torch.utils.data.dataset import Dataset
 from pycocotools.coco import COCO
-from utils.boxs import draw_box, xyxy2xywh
-from utils.augmentations import Compose, OneOf, \
+from commons.boxs_utils import draw_box, xyxy2xywh
+from commons.augmentations import Compose, OneOf, \
     ScalePadding, RandNoise, Mosaic, MixUp, RandPerspective, HSV, Identity, LRFlip, RandCutOut
 
 coco_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 31, 32, 33,

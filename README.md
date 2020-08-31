@@ -1,7 +1,7 @@
 # RetinaNet
 This is an unofficial pytorch implementation of RetinaNet object detection as described in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) by Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He and Piotr Dollár.
 
-##requirement
+## requirement
 ```text
 apex
 tqdm
@@ -12,7 +12,7 @@ pycocotools
 torch >= 1.5
 torchvision >=0.6.0
 ```
-##result
+## result
 we trained this repo on 4 GPUs with batch size 32(8 image per node).the total epoch is 18,Adam with cosine lr decay is used for optimizing.
 finally, this repo achieves 32.3 mAp at 640px(long side) resolution with resnet50 backbone.
 ```shell script

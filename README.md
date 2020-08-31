@@ -112,6 +112,9 @@ nohup python -m torch.distributed.launch --nproc_per_node=4 main.py >>train.log 
 - [x] IOU GIOU DIOU CIOU
 - [x] Warming UP
 - [x] Cosine Lr Decay
+- [x] EMA(Exponential Moving Average)
+- [x] Mixed Precision Training (supported by apex)
+- [x] Sync Batch Normalize
 - [ ] PANet(neck)
 - [ ] BiFPN(EfficientDet neck)
 - [ ] VOC data train\test scripts

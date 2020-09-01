@@ -6,7 +6,7 @@ data:
   train_img_root: /home/huffman/data/train2017
 #  train_img_root: /home/huffman/data/val2017
   val_img_root: /home/huffman/data/val2017
-  img_size: 896
+  img_size: 640
   use_crowd: False
   batch_size: 4
   num_workers: 4
@@ -28,7 +28,7 @@ hyper_params:
   alpha: 0.25
   gamma: 2.0
   beta: 1./9
-  multi_scale: [896]
+  multi_scale: [640]
 
 optim:
   optimizer: Adam
@@ -48,4 +48,4 @@ val:
   iou_thresh: 0.5
   max_det: 300
 
-gpus: 4,5,6,7
+gpus: 3,4,5,6

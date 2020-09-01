@@ -7,8 +7,8 @@ from tqdm import tqdm
 from metrics.map import coco_map
 from datasets.coco import COCODataSets
 from torch.utils.data.dataloader import DataLoader
-from utils.boxs import non_max_suppression
-from utils.augmentations import ScalePadding
+from utils.retinanet import non_max_suppression
+from commons.augmentations import ScalePadding
 from nets.retinanet import RetinaNet
 
 rgb_mean = [0.485, 0.456, 0.406]
@@ -66,13 +66,15 @@ def valid_model():
 
 def write_coco_json():
     from pycocotools.coco import COCO
+    device = torch.device("cuda:6")
     img_root = "/home/huffman/data/val2017"
-    model = RetinaNet()
-    weights = torch.load("weights/0_retinanet_last.pth")['ema']
+    model = RetinaNet(backbone='resnet18')
+    weights = torch.load("weights/resnet18_879_smooth.pth")['ema']
     model.load_state_dict(weights)
-    model.cuda().eval()
+    model.to(device)
+    model.eval()
 
-    basic_transform = ScalePadding(target_size=(640, 640), padding_val=(103, 116, 123))
+    basic_transform = ScalePadding(target_size=(896, 896), padding_val=(103, 116, 123))
     coco = COCO("/home/huffman/data/annotations/instances_val2017.json")
     coco_predict_list = list()
     for img_id in tqdm(coco.imgs.keys()):
@@ -84,7 +86,7 @@ def write_coco_json():
         h, w = img.shape[:2]
         img_out = img[:, :, [2, 1, 0]].astype(np.float32) / 255.0
         img_out = ((img_out - np.array(rgb_mean)) / np.array(rgb_std)).transpose(2, 0, 1).astype(np.float32)
-        img_out = torch.from_numpy(np.ascontiguousarray(img_out)).unsqueeze(0).float().cuda()
+        img_out = torch.from_numpy(np.ascontiguousarray(img_out)).unsqueeze(0).float().to(device)
         predicts = model(img_out)
         for i in range(len(predicts)):
             predicts[i][:, [0, 2]] = predicts[i][:, [0, 2]].clamp(min=0, max=w)

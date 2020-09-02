@@ -45,7 +45,7 @@ default_aug_cfg = {
     'translate': 0.1,
     'scale': (0.6, 1.5),
     'shear': 0.0,
-    'beta': 1.5,
+    'beta': (8, 8),
     'pad_val': (103, 116, 123),
     # 'pad_val': (114, 114, 114)
 }
@@ -153,10 +153,10 @@ class COCODataSets(Dataset):
         img_path, label = self.img_paths[item], self.labels[item]
         img = cv.imread(img_path)
         img, label = self.transform(img, label)
-        # if self.debug:
-        #     import uuid
-        #     ret_img = draw_box(img, label, colors, coco_names)
-        #     cv.imwrite("{:d}_{:s}.jpg".format(item, str(uuid.uuid4()).replace('-', "")), ret_img)
+        if self.debug:
+            import uuid
+            ret_img = draw_box(img, label, colors, coco_names)
+            cv.imwrite("{:d}_{:s}.jpg".format(item, str(uuid.uuid4()).replace('-', "")), ret_img)
         label_num = len(label)
         if label_num:
             # [weight,label,x1,y1,x2,y2]
@@ -175,7 +175,7 @@ class COCODataSets(Dataset):
         if self.augments:
             self.transform = Compose(transforms=[
                 OneOf(transforms=[
-                    (0.6, Compose(transforms=[
+                    (0.2, Compose(transforms=[
                         OneOf(transforms=[Identity(),
                                           HSV(p=1,
                                               hgain=self.aug_cfg['hsv_h'],
@@ -200,9 +200,19 @@ class COCODataSets(Dataset):
                                                                     vgain=self.aug_cfg['hsv_v']),
                                                                 RandNoise()]),
                                  target_size=self.img_size,
-                                 pad_val=self.aug_cfg['pad_val']))
+                                 pad_val=self.aug_cfg['pad_val'])),
+                    (0.4, MixUp(self.img_paths,
+                                self.labels,
+                                color_gitter=OneOf(transforms=[Identity(),
+                                                               HSV(p=1,
+                                                                   hgain=self.aug_cfg['hsv_h'],
+                                                                   sgain=self.aug_cfg['hsv_s'],
+                                                                   vgain=self.aug_cfg['hsv_v']),
+                                                               RandNoise()]),
+                                target_size=self.img_size,
+                                pad_val=self.aug_cfg['pad_val'],
+                                beta=self.aug_cfg['beta']))
                 ]),
-
                 LRFlip()])
         else:
             self.transform = ScalePadding(target_size=(self.img_size, self.img_size),

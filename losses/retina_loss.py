@@ -58,15 +58,14 @@ class RetinaLossBuilder(object):
 
 
 class RetinaLoss(object):
-    def __init__(self, iou_thresh=0.5, ignore_thresh=0.4, alpha=0.25, gamma=2.0, beta=1. / 9):
+    def __init__(self, iou_thresh=0.5, ignore_thresh=0.4, alpha=0.25, gamma=2.0, iou_type="giou"):
         self.iou_thresh = iou_thresh
         self.ignore_thresh = ignore_thresh
         self.alpha = alpha
         self.gama = gamma
-        self.beta = beta
         self.builder = RetinaLossBuilder(iou_thresh, ignore_thresh)
         self.box_coder = BoxCoder()
-        self.iou_loss = IOULoss(iou_type="ciou")
+        self.iou_loss = IOULoss(iou_type=iou_type)
 
     def __call__(self, cls_predicts, reg_predicts, anchors, targets):
         """
@@ -105,7 +104,11 @@ class RetinaLoss(object):
             valid_cls_predicts = batch_cls_predict[valid_idx, :]
             cls_targets = torch.zeros(size=valid_cls_predicts.shape, device=device)
             cls_targets[range(pos_num), gt[pos_idx, 1].long()] = 1.
+
+            mix_weights = torch.ones(size=valid_cls_predicts.shape, device=device)
+            mix_weights[range(pos_num), gt[pos_idx, 1].long()] = gt[pos_idx, 0]
             pos_loss = -self.alpha * cls_targets * ((1 - valid_cls_predicts) ** self.gama) * valid_cls_predicts.log()
+            pos_loss = mix_weights * pos_loss
             neg_loss = -(1 - self.alpha) * (1. - cls_targets) * (valid_cls_predicts ** self.gama) * (
                 (1 - valid_cls_predicts).log())
             cls_loss = (pos_loss + neg_loss).sum()
@@ -116,7 +119,8 @@ class RetinaLoss(object):
             gt_bbox = gt[pos_idx, 2:]
             # delta_targets = self.box_coder.encoder(all_anchors[pos_idx], gt_bbox)
             reg_loss = self.iou_loss(predict_box, gt_bbox)
-            reg_loss_list.append(reg_loss)
+            reg_loss * gt[pos_idx, 0]
+            reg_loss_list.append(reg_loss.sum())
 
         cls_loss_sum = torch.stack(cls_loss_list).sum()
         if pos_num_sum == 0:

@@ -62,7 +62,7 @@ class BoxCoder(object):
         super(BoxCoder, self).__init__()
         if weights is None:
             weights = [0.1, 0.1, 0.2, 0.2]
-        self.weights = weights
+        self.weights = torch.tensor(data=weights, requires_grad=False)
 
     def encoder(self, anchors, gt_boxes):
         """
@@ -70,7 +70,8 @@ class BoxCoder(object):
         :param anchors: [box_num, 4]
         :return:
         """
-        weights = torch.tensor(data=self.weights, device=anchors.device)
+        if self.weights.device != anchors.device:
+            self.weights = self.weights.to(anchors.device)
         anchors_wh = anchors[..., [2, 3]] - anchors[..., [0, 1]]
         anchors_xy = anchors[..., [0, 1]] + 0.5 * anchors_wh
         gt_wh = (gt_boxes[..., [2, 3]] - gt_boxes[..., [0, 1]]).clamp(min=1.0)
@@ -78,7 +79,7 @@ class BoxCoder(object):
         delta_xy = (gt_xy - anchors_xy) / anchors_wh
         delta_wh = (gt_wh / anchors_wh).log()
 
-        delta_targets = torch.cat([delta_xy, delta_wh], dim=-1) / weights
+        delta_targets = torch.cat([delta_xy, delta_wh], dim=-1) / self.weights
 
         return delta_targets
 
@@ -88,10 +89,11 @@ class BoxCoder(object):
         :param anchors: [anchor_num, 4]
         :return: [anchor_num, 4] (x1,y1,x2,y2)
         """
-        weights = torch.tensor(data=self.weights, device=anchors.device)
+        if self.weights.device != anchors.device:
+            self.weights = self.weights.to(anchors.device)
         anchors_wh = anchors[:, [2, 3]] - anchors[:, [0, 1]]
         anchors_xy = anchors[:, [0, 1]] + 0.5 * anchors_wh
-        scale_reg = predicts * weights
+        scale_reg = predicts * self.weights
         scale_reg[..., :2] = anchors_xy + scale_reg[..., :2] * anchors_wh
         scale_reg[..., 2:] = scale_reg[..., 2:].exp() * anchors_wh
         scale_reg[..., :2] -= (0.5 * scale_reg[..., 2:])

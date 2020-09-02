@@ -69,12 +69,12 @@ def write_coco_json():
     device = torch.device("cuda:6")
     img_root = "/home/huffman/data/val2017"
     model = RetinaNet(backbone='resnet18')
-    weights = torch.load("weights/resnet18_879_smooth.pth")['ema']
+    weights = torch.load("weights/0_retinanet_last.pth")['ema']
     model.load_state_dict(weights)
     model.to(device)
     model.eval()
 
-    basic_transform = ScalePadding(target_size=(896, 896), padding_val=(103, 116, 123))
+    basic_transform = ScalePadding(target_size=(640, 640), padding_val=(103, 116, 123))
     coco = COCO("/home/huffman/data/annotations/instances_val2017.json")
     coco_predict_list = list()
     for img_id in tqdm(coco.imgs.keys()):

@@ -612,7 +612,7 @@ class MixUp(DetectAugment):
     def __init__(self, candidate_imgs,
                  candidate_labels,
                  color_gitter=None,
-                 alpha=0.6,
+                 beta=(8, 8),
                  target_size=(640, 640),
                  pad_val=(114, 114, 114),
                  **kwargs):
@@ -620,7 +620,7 @@ class MixUp(DetectAugment):
         :param candidate_imgs: 候选图片路径列表
         :param candidate_labels: 图片对应标注列表
         :param color_gitter: 单张图片进行混合增强前使用的color gitter
-        :param alpha: 混合因子
+        :param beta: 混合因子
         :param target_size: 长边缩放尺寸
         :param pad_val: padding部分填充的数值
         :param kwargs:
@@ -631,15 +631,15 @@ class MixUp(DetectAugment):
         self.candidate_labels = candidate_labels
         if color_gitter is None:
             color_gitter = Identity()
+        self.beta = beta
         self.color_gitter = color_gitter
-        self.alpha = alpha
         self.pad_val = pad_val
         self.scale_padding = ScalePadding(target_size=target_size, padding_val=pad_val, scale_up=True)
 
     def img_aug(self, img: np.ndarray) -> np.ndarray:
         index = random.randint(0, len(self.candidate_labels) - 1)
         # alpha = round(np.random.uniform(0.36, 0.64), 2)
-        alpha = self.alpha
+        alpha = np.random.beta(self.beta[0], self.beta[1])
         append_img = cv.imread(self.candidate_imgs[index])
         append_img, _ = self.color_gitter(append_img, np.zeros(shape=(0, 6), dtype=np.float32))
         h1, w1 = img.shape[:2]
@@ -656,7 +656,7 @@ class MixUp(DetectAugment):
 
     def aug(self, img: np.ndarray, labels: np.ndarray) -> tuple:
         index = random.randint(0, len(self.candidate_labels) - 1)
-        alpha = self.alpha
+        alpha = np.random.beta(self.beta[0], self.beta[1])
         append_img = cv.imread(self.candidate_imgs[index])
         append_labels = self.candidate_labels[index]
         append_img, append_labels = self.color_gitter(append_img, append_labels)

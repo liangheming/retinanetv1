@@ -92,14 +92,11 @@ class DDPApexProcessor(object):
         self.optimizer = optimizer
         self.ema = ModelEMA(self.model)
 
-        beta = eval(self.hyper_params['beta']) if isinstance(self.hyper_params['beta'], str) \
-            else self.hyper_params['beta']
-
         self.creterion = RetinaLoss(iou_thresh=self.hyper_params['iou_thresh'],
                                     ignore_thresh=self.hyper_params['ignore_thresh'],
                                     alpha=self.hyper_params['alpha'],
                                     gamma=self.hyper_params['gamma'],
-                                    beta=beta,
+                                    iou_type=self.hyper_params['iou_type'],
                                     )
         self.lr_adjuster = WarmUpCosineDecayMultiStepLRAdjust(init_lr=self.optim_cfg['lr'],
                                                               milestones=self.optim_cfg['milestones'],

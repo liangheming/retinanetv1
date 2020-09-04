@@ -146,7 +146,7 @@ class DDPApexProcessor(object):
                 pbar.set_description(
                     "epoch:{:2d}|match_num:{:4d}|size:{:3d}|target_loss:{:6.4f}|loss_cls:{:6.4f}|loss_reg:{:6.4f}|lr:{:8.6f}".format(
                         epoch + 1,
-                        total_num,
+                        int(total_num),
                         h,
                         total_loss.item(),
                         loss_cls.item(),

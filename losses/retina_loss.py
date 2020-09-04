@@ -4,6 +4,22 @@ from utils.retinanet import BoxCoder
 from losses.commons import IOULoss
 
 
+def get_gpu_num():
+    import os
+    g_num = len(os.environ['CUDA_VISIBLE_DEVICES'].split(',')) if 'CUDA_VISIBLE_DEVICES' in os.environ else 1
+    return g_num
+
+
+def reduce_sum(tensor):
+    import torch.distributed as dist
+    g_num = get_gpu_num()
+    if g_num <= 1:
+        return tensor
+    tensor = tensor.clone()
+    dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+    return tensor
+
+
 def smooth_l1_loss(predicts, target, beta=1. / 9):
     """
     very similar to the smooth_l1_loss from pytorch, but with
@@ -84,7 +100,7 @@ class RetinaLoss(object):
         cls_loss_list = list()
         reg_loss_list = list()
 
-        pos_num_sum = 0
+        pos_num_sum = 0.
         for bi in range(bs):
             batch_cls_predict = torch.cat([cls_item[bi] for cls_item in cls_predicts], dim=0) \
                 .sigmoid() \
@@ -123,8 +139,9 @@ class RetinaLoss(object):
             reg_loss_list.append(reg_loss.sum())
 
         cls_loss_sum = torch.stack(cls_loss_list).sum()
+        pos_num_sum = reduce_sum(torch.tensor(data=pos_num_sum, device=device).float()).item() / get_gpu_num()
         if pos_num_sum == 0:
-            total_loss = cls_loss_sum / bs
+            total_loss = cls_loss_sum
             return total_loss, torch.stack([cls_loss_sum, torch.tensor(data=0., device=device)]).detach(), pos_num_sum
         reg_loss_sum = torch.stack(reg_loss_list).sum()
 

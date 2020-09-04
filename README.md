@@ -13,21 +13,21 @@ torch >= 1.5
 torchvision >=0.6.0
 ```
 ## result
-we trained this repo on 4 GPUs with batch size 32(8 image per node).the total epoch is 18,Adam with cosine lr decay is used for optimizing.
-finally, this repo achieves 32.3 mAp at 640px(long side) resolution with resnet50 backbone.
+we trained this repo on 4 GPUs with batch size 16(4 image per node).the total epoch is 18(about 130k iter),Adam with cosine lr decay is used for optimizing.
+finally, this repo achieves 34.8 mAp at 896px(max side) resolution with resnet50 backbone.
 ```shell script
-Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.323
-Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.490
-Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.343
-Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.141
-Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.371
-Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.462
-Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.289
-Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.439
-Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.464
-Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.192
-Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.551
-Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.658
+Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.348
+Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.537
+Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.366
+Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.201
+Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.391
+Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.485
+Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.291
+Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.470
+Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.502
+Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.291
+Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.577
+Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.656
 ```
 
 ## difference from original implement

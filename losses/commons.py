@@ -2,9 +2,9 @@ import torch
 import math
 
 
-class BoxDistance(object):
+class BoxSimilarity(object):
     def __init__(self, iou_type="giou"):
-        super(BoxDistance, self).__init__()
+        super(BoxSimilarity, self).__init__()
         self.iou_type = iou_type
 
     def __call__(self, predicts, targets):
@@ -64,7 +64,7 @@ class IOULoss(object):
     def __init__(self, iou_type="giou"):
         super(IOULoss, self).__init__()
         self.iou_type = iou_type
-        self.box_distance = BoxDistance(iou_type)
+        self.box_distance = BoxSimilarity(iou_type)
 
     def __call__(self, predicts, targets):
         dis = self.box_distance(predicts, targets)

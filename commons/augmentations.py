@@ -501,7 +501,9 @@ class Mosaic(DetectAugment):
     def __init__(self, candidate_imgs, candidate_labels,
                  color_gitter=None,
                  target_size=640,
-                 pad_val=(114, 114, 114), **kwargs):
+                 pad_val=(114, 114, 114),
+                 rand_center=False,
+                 **kwargs):
         """
         :param candidate_imgs: 候选图片路径列表
         :param candidate_labels: 图片对应标注列表
@@ -517,6 +519,7 @@ class Mosaic(DetectAugment):
         self.target_size = target_size
         self.pad_val = pad_val
         self.scale_no_pad = ScaleNoPadding(target_size)
+        self.rand_center = rand_center
         self.mosaic_border = (-self.target_size // 2, -self.target_size // 2)
         if color_gitter is None:
             color_gitter = Identity()
@@ -524,15 +527,18 @@ class Mosaic(DetectAugment):
         self.affine = RandPerspective(p=1,
                                       target_size=(target_size, target_size),
                                       degree=0,
-                                      translate=0,
-                                      scale=(0.6, 1.2),
+                                      translate=0.1,
+                                      scale=(0.5, 1.),
                                       shear=0,
                                       perspective=0.0,
                                       pad_val=pad_val,
                                       )
 
     def img_aug(self, img: np.ndarray) -> np.ndarray:
-        yc, xc = [int(random.uniform(-x, 2 * self.target_size + x)) for x in self.mosaic_border]
+        if self.rand_center:
+            yc, xc = [int(random.uniform(-x, 2 * self.target_size + x)) for x in self.mosaic_border]
+        else:
+            yc, xc = [self.target_size, self.target_size]
         indices = [random.randint(0, len(self.candidate_labels) - 1) for _ in range(3)]
         img4 = np.ones(shape=(self.target_size * 2, self.target_size * 2, 3))
         img4 = (img4 * (np.array(self.pad_val)[None, None, :])).astype(np.uint8)
@@ -558,7 +564,10 @@ class Mosaic(DetectAugment):
         return img4
 
     def aug(self, img: np.ndarray, labels: np.ndarray) -> tuple:
-        yc, xc = [int(random.uniform(-x, 2 * self.target_size + x)) for x in self.mosaic_border]
+        if self.rand_center:
+            yc, xc = [int(random.uniform(-x, 2 * self.target_size + x)) for x in self.mosaic_border]
+        else:
+            yc, xc = [self.target_size, self.target_size]
         indices = [random.randint(0, len(self.candidate_labels) - 1) for _ in range(3)]
 
         img4 = np.ones(shape=(self.target_size * 2, self.target_size * 2, 3))
@@ -692,22 +701,16 @@ class OneOf(DetectAugment):
             transforms = [(prob, transform) for transform in transforms]
         probs, transforms = zip(*transforms)
         probs, transforms = list(probs), list(transforms)
-        for item in probs:
-            assert item > 0, "prob > 0"
-        assert np.sum(probs) == 1.0, 'sum of prob should be equal to 1'
-        probs.insert(0, 0)
-        self.flag = np.cumsum(probs)[:-1]
+        self.probs = probs
         self.transforms = transforms
 
     def img_aug(self, img: np.ndarray) -> np.ndarray:
-        p = np.random.uniform(0, 1)
-        index = (self.flag < p).sum() - 1
+        index = np.random.choice(a=range(len(self.probs)), p=self.probs)
         img = self.transforms[index].img_aug(img)
         return img
 
     def aug(self, img: np.ndarray, labels: np.ndarray) -> tuple:
-        p = np.random.uniform(0, 1)
-        index = (self.flag < p).sum() - 1
+        index = np.random.choice(a=range(len(self.probs)), p=self.probs)
         img, labels = self.transforms[index](img, labels)
         return img, labels
 

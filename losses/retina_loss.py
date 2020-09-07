@@ -139,7 +139,7 @@ class RetinaLoss(object):
             reg_loss_list.append(reg_loss.sum())
 
         cls_loss_sum = torch.stack(cls_loss_list).sum()
-        pos_num_sum = reduce_sum(torch.tensor(data=pos_num_sum, device=device).float()).item() / get_gpu_num()
+        # pos_num_sum = reduce_sum(torch.tensor(data=pos_num_sum, device=device).float()).item() / get_gpu_num()
         if pos_num_sum == 0:
             total_loss = cls_loss_sum
             return total_loss, torch.stack([cls_loss_sum, torch.tensor(data=0., device=device)]).detach(), pos_num_sum

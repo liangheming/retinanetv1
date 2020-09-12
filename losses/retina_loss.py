@@ -81,7 +81,7 @@ class RetinaLoss(object):
         self.gama = gamma
         self.builder = RetinaLossBuilder(iou_thresh, ignore_thresh)
         self.box_coder = BoxCoder()
-        self.iou_loss = IOULoss(iou_type=iou_type)
+        self.iou_loss = IOULoss(iou_type=iou_type, coord_type="xyxy")
 
     def __call__(self, cls_predicts, reg_predicts, anchors, targets):
         """

@@ -218,8 +218,8 @@ class COCODataSets(Dataset):
 
             self.transform = Compose(transforms=[
                 OneOf(transforms=[
-                    (0.2, basic_transform),
-                    (0.8, mosaic),
+                    (0., basic_transform),
+                    (1., mosaic),
                     (0., mix_up),
                     (0., aug_mosaic),
                     (0., aug_mixup)

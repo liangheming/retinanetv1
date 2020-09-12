@@ -6,7 +6,7 @@ data:
   train_img_root: /home/huffman/data/train2017
 #  train_img_root: /home/huffman/data/val2017
   val_img_root: /home/huffman/data/val2017
-  img_size: 896
+  img_size: 1024
   use_crowd: False
   batch_size: 4
   num_workers: 4
@@ -27,19 +27,19 @@ hyper_params:
   ignore_thresh: 0.4
   alpha: 0.25
   gamma: 2.0
-  iou_type: giou
-  multi_scale: [896]
+  iou_type: ciou
+  multi_scale: [1024]
 
 optim:
-  optimizer: Adam
-  lr: 0.0001
+  optimizer: SGD
+  lr: 0.01
   momentum: 0.9
-  milestones: [12,18]
+  milestones: [18,22]
   cosine_weights: 1.0
-  warm_up_epoch: 0.
-  max_norm: 2
+  warm_up_epoch: 1.
+  max_norm: 5
   weight_decay: 0.0001
-  epochs: 18
+  epochs: 24
   sync_bn: True
 val:
   interval: 1

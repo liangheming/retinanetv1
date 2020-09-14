@@ -132,8 +132,8 @@ class DDPApexProcessor(object):
                 total_loss, detail_loss, total_num = self.creterion(cls_predicts, reg_predicts, anchors, targets_tensor)
             self.scaler.scale(total_loss).backward()
             match_num += total_num
-            nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.optim_cfg['max_norm'],
-                                     norm_type=2)
+            # nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.optim_cfg['max_norm'],
+            #                          norm_type=2)
             self.lr_adjuster(self.optimizer, i, epoch)
             lr = self.optimizer.param_groups[0]['lr']
             self.scaler.step(self.optimizer)

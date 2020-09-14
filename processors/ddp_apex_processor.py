@@ -158,7 +158,7 @@ class DDPApexProcessor(object):
         print(
             "epoch:{:3d}|match_num:{:4d}|local:{:3d}|target_loss:{:6.4f}|loss_cls:{:6.4f}|loss_reg:{:6.4f}|lr:{:8.6f}"
                 .format(epoch + 1,
-                        match_num,
+                        int(match_num),
                         self.local_rank,
                         mean_loss_list[0],
                         mean_loss_list[1],
@@ -179,7 +179,7 @@ class DDPApexProcessor(object):
             targets_tensor[:, 3:] = targets_tensor[:, 3:] * torch.tensor(data=[w, h, w, h])
             img_tensor = img_tensor.to(self.device)
             targets_tensor = targets_tensor.to(self.device)
-            predicts = self.model(img_tensor)
+            predicts = self.ema.ema(img_tensor)
 
             for i in range(len(predicts)):
                 predicts[i][:, [0, 2]] = predicts[i][:, [0, 2]].clamp(min=0, max=w)

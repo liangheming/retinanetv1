@@ -7,7 +7,7 @@ from pycocotools.coco import COCO
 from commons.boxs_utils import draw_box, xyxy2xywh
 from commons.augmentations import Compose, OneOf, \
     ScalePadding, RandNoise, Mosaic, MixUp, RandPerspective, HSV, Identity, LRFlip, RandCutOut
-
+cv.setNumThreads(0)
 coco_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 31, 32, 33,
             34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
             62, 63, 64, 65, 67, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90]
@@ -152,10 +152,10 @@ class COCODataSets(Dataset):
         img_path, label = self.img_paths[item], self.labels[item]
         img = cv.imread(img_path)
         img, label = self.transform(img, label)
-        if self.debug:
-            import uuid
-            ret_img = draw_box(img, label, colors, coco_names)
-            cv.imwrite("{:d}_{:s}.jpg".format(item, str(uuid.uuid4()).replace('-', "")), ret_img)
+        # if self.debug:
+        #     import uuid
+        #     ret_img = draw_box(img, label, colors, coco_names)
+        #     cv.imwrite("{:d}_{:s}.jpg".format(item, str(uuid.uuid4()).replace('-', "")), ret_img)
         label_num = len(label)
         if label_num:
             # [weight,label,x1,y1,x2,y2]
@@ -218,8 +218,8 @@ class COCODataSets(Dataset):
 
             self.transform = Compose(transforms=[
                 OneOf(transforms=[
-                    (0., basic_transform),
-                    (1., mosaic),
+                    (0.2, basic_transform),
+                    (0.8, mosaic),
                     (0., mix_up),
                     (0., aug_mosaic),
                     (0., aug_mixup)

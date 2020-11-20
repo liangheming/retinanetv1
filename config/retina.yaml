@@ -17,13 +17,13 @@ model:
   num_cls: 80
   anchor_sizes: [32, 64, 128, 256, 512]
   strides: [8, 16, 32, 64, 128]
-  backbone: resnet18
+  backbone: resnet50
   pretrained: True
   iou_thresh: 0.5
   ignore_thresh: 0.4
   alpha: 0.25
   gamma: 2.0
-  allow_low_quality_matches: True
+  allow_low_quality_matches: False
   iou_type: giou
   conf_thresh: 0.05
   nms_iou_thresh: 0.5
@@ -31,11 +31,11 @@ model:
 
 optim:
   optimizer: Adam
-  lr: 0.0002
-  milestones: [12,16]
+  lr: 0.0001
+  milestones: [24,28]
   warm_up_epoch: 0
   weight_decay: 0.0001
-  epochs: 18
+  epochs: 30
   sync_bn: True
   amp: True
 val:

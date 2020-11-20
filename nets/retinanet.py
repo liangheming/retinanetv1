@@ -2,7 +2,7 @@ import torch
 import math
 from nets import resnet
 from torch import nn
-from nets.common import FPN, CBR
+from nets.common import FPN, CGR
 from losses.retina_loss import BoxCoder, RetinaLoss
 from torchvision.ops.boxes import nms
 
@@ -81,9 +81,9 @@ class RetinaClsHead(nn.Module):
         self.bones = list()
         for i in range(num_layers):
             if i == 0:
-                conv = CBR(in_channel, inner_channel, 3, 1)
+                conv = CGR(in_channel, inner_channel, 3, 1)
             else:
-                conv = CBR(inner_channel, inner_channel, 3, 1)
+                conv = CGR(inner_channel, inner_channel, 3, 1)
             self.bones.append(conv)
         self.bones = nn.Sequential(*self.bones)
         self.cls = nn.Conv2d(inner_channel, self.num_anchors * self.num_cls, 3, 1, 1)
@@ -111,9 +111,9 @@ class RetinaRegHead(nn.Module):
         self.bones = list()
         for i in range(num_layers):
             if i == 0:
-                conv = CBR(in_channel, inner_channel, 3, 1)
+                conv = CGR(in_channel, inner_channel, 3, 1)
             else:
-                conv = CBR(inner_channel, inner_channel, 3, 1)
+                conv = CGR(inner_channel, inner_channel, 3, 1)
             self.bones.append(conv)
         self.bones = nn.Sequential(*self.bones)
         self.reg = nn.Conv2d(inner_channel, self.num_anchors * 4, 3, 1, 1)

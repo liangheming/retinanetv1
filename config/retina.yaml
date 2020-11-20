@@ -31,7 +31,7 @@ model:
 
 optim:
   optimizer: Adam
-  lr: 0.0001
+  lr: 0.0002
   milestones: [12,16]
   warm_up_epoch: 0
   weight_decay: 0.0001

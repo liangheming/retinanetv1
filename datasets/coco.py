@@ -218,17 +218,17 @@ class COCODataSets(Dataset):
             self.transform = std_transform
 
 
-if __name__ == '__main__':
-    from torch.utils.data.dataloader import DataLoader
-
-    dataset = COCODataSets(img_root="/home/huffman/data/val2017",
-                           annotation_path="/home/huffman/data/annotations/instances_val2017.json",
-                           use_crowd=False,
-                           augments=True,
-                           debug=60,
-                           remove_blank=False
-                           )
-    loader = DataLoader(dataset=dataset, batch_size=16, shuffle=True, num_workers=4, collate_fn=dataset.collect_fn)
-
-    for _ in loader:
-        break
+# if __name__ == '__main__':
+#     from torch.utils.data.dataloader import DataLoader
+#
+#     dataset = COCODataSets(img_root="/home/huffman/data/val2017",
+#                            annotation_path="/home/huffman/data/annotations/instances_val2017.json",
+#                            use_crowd=False,
+#                            augments=True,
+#                            debug=60,
+#                            remove_blank=False
+#                            )
+#     loader = DataLoader(dataset=dataset, batch_size=16, shuffle=True, num_workers=4, collate_fn=dataset.collect_fn)
+#
+#     for _ in loader:
+#         break

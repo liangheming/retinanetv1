@@ -3,7 +3,6 @@ This is an unofficial pytorch implementation of RetinaNet object detection as de
 
 ## requirement
 ```text
-apex
 tqdm
 pyyaml
 numpy
@@ -43,22 +42,24 @@ for now we only support coco detection data.
 ### COCO
 * modify main.py (modify config file path)
 ```python
-from processors.ddp_apex_processor import DDPApexProcessor
+from solver.ddp_mix_solver import DDPMixSolver
 if __name__ == '__main__':
-    processor = DDPApexProcessor(cfg_path="your own config path") 
+    processor = DDPMixSolver(cfg_path="your own config path") 
     processor.run()
 ```
 * custom some parameters in *config.yaml*
 ```yaml
 model_name: retinanet
 data:
-  train_annotation_path: ../annotations/instances_train2017.json 
-  val_annotation_path: ../annotations/instances_val2017.json
-  train_img_root: ../data/train2017
-  val_img_root: ../data/val2017
-  img_size: 896
+  train_annotation_path: data/annotations/instances_train2017.json
+#  train_annotation_path: data/annotations/instances_val2017.json
+  val_annotation_path: data/annotations/instances_val2017.json
+  train_img_root: data/train2017
+#  train_img_root:data/val2017
+  val_img_root:data/val2017
+  max_thresh: 640
   use_crowd: False
-  batch_size: 4
+  batch_size: 8
   num_workers: 4
   debug: False
   remove_blank: Ture
@@ -68,34 +69,30 @@ model:
   anchor_sizes: [32, 64, 128, 256, 512]
   strides: [8, 16, 32, 64, 128]
   backbone: resnet18
-  backbone_weight: weights/resnet18.pth
-  freeze_bn: False
-
-hyper_params:
+  pretrained: True
   iou_thresh: 0.5
   ignore_thresh: 0.4
   alpha: 0.25
   gamma: 2.0
-  beta: 1./9
-  multi_scale: [896]
+  allow_low_quality_matches: True
+  iou_type: giou
+  conf_thresh: 0.05
+  nms_iou_thresh: 0.5
+  max_det: 300
 
 optim:
   optimizer: Adam
   lr: 0.0001
-  momentum: 0.9
-  milestones: [12,18]
-  cosine_weights: 1.0
-  warm_up_epoch: 0.
-  max_norm: 2
+  milestones: [12,16]
+  warm_up_epoch: 0
   weight_decay: 0.0001
   epochs: 18
   sync_bn: True
+  amp: True
 val:
   interval: 1
   weight_path: weights
-  conf_thresh: 0.05
-  iou_thresh: 0.5
-  max_det: 300
+
 
 gpus: 0,1,2,3
 ```

@@ -1,38 +1,65 @@
 import torch
 import math
+from nets import resnet
 from torch import nn
-from nets.common import CR, FPN, CBR
-from utils.retinanet import BoxCoder
-
-default_anchor_sizes = [32., 64., 128., 256., 512.]
-default_strides = [8, 16, 32, 64, 128]
-default_anchor_scales = [2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)]
-default_anchor_ratios = [0.5, 1., 2.]
+from nets.common import FPN, CBR
+from losses.retina_loss import BoxCoder, RetinaLoss
+from torchvision.ops.boxes import nms
 
 
-def switch_backbones(bone_name):
-    from nets.resnet import resnet18, resnet34, resnet50, resnet101, resnet152, \
-        resnext50_32x4d, resnext101_32x8d, wide_resnet50_2, wide_resnet101_2
-    if bone_name == "resnet18":
-        return resnet18()
-    elif bone_name == "resnet34":
-        return resnet34()
-    elif bone_name == "resnet50":
-        return resnet50()
-    elif bone_name == "resnet101":
-        return resnet101()
-    elif bone_name == "resnet152":
-        return resnet152()
-    elif bone_name == "resnext50_32x4d":
-        return resnext50_32x4d()
-    elif bone_name == "resnext101_32x8d":
-        return resnext101_32x8d()
-    elif bone_name == "wide_resnet50_2":
-        return wide_resnet50_2()
-    elif bone_name == "wide_resnet101_2":
-        return wide_resnet101_2()
-    else:
-        raise NotImplementedError(bone_name)
+def non_max_suppression(prediction,
+                        conf_thresh=0.05,
+                        iou_thresh=0.5,
+                        max_det=300,
+                        max_box=2048,
+                        max_layer_num=1000
+                        ):
+    """
+    :param max_layer_num:
+    :param prediction:
+    :param conf_thresh:
+    :param iou_thresh:
+    :param max_det:
+    :param max_box:
+    :return:
+    """
+    for i in range(len(prediction)):
+        if prediction[i].dtype == torch.float16:
+            prediction[i] = prediction[i].float()
+    bs = prediction[0].shape[0]
+    out = [None] * bs
+    for bi in range(bs):
+        batch_predicts_list = [torch.zeros(size=(0, 6), device=prediction[0].device).float()] * len(prediction)
+        for lj in range(len(prediction)):
+            one_layer_bath_predict = prediction[lj][bi]
+            reg_predicts = one_layer_bath_predict[:, :4]
+            cls_predicts = one_layer_bath_predict[:, 4:].sigmoid()
+
+            max_val, max_idx = cls_predicts.max(dim=1)
+            valid_bool_idx = max_val > conf_thresh
+            if valid_bool_idx.sum() == 0:
+                continue
+            valid_val = max_val[valid_bool_idx]
+            sorted_idx = valid_val.argsort(descending=True)
+            valid_val = valid_val[sorted_idx]
+            valid_box = reg_predicts[valid_bool_idx, :][sorted_idx]
+            valid_cls = max_idx[valid_bool_idx][sorted_idx]
+            if 0 < max_layer_num < valid_box.shape[0]:
+                valid_val = valid_val[:max_layer_num]
+                valid_box = valid_box[:max_layer_num, :]
+                valid_cls = valid_cls[:max_layer_num]
+            batch_predicts = torch.cat([valid_box, valid_val[:, None], valid_cls[:, None]], dim=-1)
+            batch_predicts_list[lj] = batch_predicts
+        x = torch.cat(batch_predicts_list, dim=0)
+        if x.shape[0] == 0:
+            continue
+        c = x[:, 5:6] * max_box
+        boxes, scores = x[:, :4] + c, x[:, 4]
+        i = nms(boxes, scores, iou_thresh)
+        if i.shape[0] > max_det:
+            i = i[:max_det]
+        out[bi] = x[i]
+    return out
 
 
 class Scale(nn.Module):
@@ -109,28 +136,22 @@ class RetinaRegHead(nn.Module):
 class RetinaHead(nn.Module):
     def __init__(self, in_channel,
                  inner_channel,
+                 anchor_sizes,
+                 anchor_scales,
+                 anchor_ratios,
+                 strides,
                  num_cls=80,
                  num_convs=4,
                  layer_num=5,
-                 anchor_sizes=None,
-                 anchor_scales=None,
-                 anchor_ratios=None,
-                 strides=None):
+                 ):
         super(RetinaHead, self).__init__()
         self.num_cls = num_cls
         self.layer_num = layer_num
-        if anchor_sizes is None:
-            anchor_sizes = default_anchor_sizes
         self.anchor_sizes = anchor_sizes
-        if anchor_scales is None:
-            anchor_scales = default_anchor_scales
         self.anchor_scales = anchor_scales
-        if anchor_ratios is None:
-            anchor_ratios = default_anchor_ratios
         self.anchor_ratios = anchor_ratios
-        if strides is None:
-            strides = default_strides
         self.strides = strides
+
         self.anchor_nums = len(self.anchor_scales) * len(self.anchor_ratios)
         self.scales = nn.ModuleList([Scale(init_val=1.0) for _ in range(self.layer_num)])
         self.anchors = [torch.zeros(size=(0, 4))] * self.layer_num
@@ -195,40 +216,79 @@ class RetinaHead(nn.Module):
             return predicts_list
 
 
+default_cfg = {
+    "num_cls": 80,
+    "anchor_sizes": [32., 64., 128., 256., 512.],
+    "anchor_scales": [2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)],
+    "anchor_ratios": [0.5, 1., 2.],
+    "strides": [8, 16, 32, 64, 128],
+    "backbone": "resnet18",
+    "pretrained": True,
+    "fpn_channel": 256,
+    "head_conv_num": 4,
+    # loss
+    "iou_type": "giou",
+    "iou_thresh": 0.5,
+    "ignore_thresh": 0.4,
+    "alpha": 0.25,
+    "gamma": 2.0,
+    "allow_low_quality_matches": False,
+    # predicts
+    "conf_thresh": 0.01,
+    "nms_iou_thresh": 0.5,
+    "max_det": 300
+
+}
+
+
 class RetinaNet(nn.Module):
-    def __init__(self,
-                 anchor_sizes=None,
-                 anchor_scales=None,
-                 anchor_ratios=None,
-                 strides=None,
-                 num_cls=80,
-                 backbone='resnet50'
-                 ):
+    def __init__(self, **kwargs):
+        self.cfg = {**default_cfg, **kwargs}
         super(RetinaNet, self).__init__()
-        self.backbones = switch_backbones(backbone)
+        self.backbones = getattr(resnet, self.cfg['backbone'])(pretrained=self.cfg['pretrained'])
         c3, c4, c5 = self.backbones.inner_channels
-        self.neck = FPN(c3, c4, c5, 256)
-        self.head = RetinaHead(256,
-                               256,
-                               num_cls,
-                               4,
-                               5,
-                               anchor_sizes,
-                               anchor_scales,
-                               anchor_ratios,
-                               strides)
+        self.neck = FPN(c3, c4, c5, self.cfg['fpn_channel'])
+        self.head = RetinaHead(in_channel=self.cfg['fpn_channel'],
+                               inner_channel=self.cfg['fpn_channel'],
+                               num_cls=self.cfg['num_cls'],
+                               num_convs=self.cfg['head_conv_num'],
+                               layer_num=5,
+                               anchor_sizes=self.cfg['anchor_sizes'],
+                               anchor_scales=self.cfg['anchor_scales'],
+                               anchor_ratios=self.cfg['anchor_ratios'],
+                               strides=self.cfg['strides'])
+        self.loss = RetinaLoss(iou_thresh=self.cfg['iou_thresh'],
+                               ignore_thresh=self.cfg['ignore_thresh'],
+                               alpha=self.cfg['alpha'],
+                               gamma=self.cfg['gamma'],
+                               iou_type=self.cfg['iou_type'],
+                               allow_low_quality_matches=self.cfg['allow_low_quality_matches'])
 
-    def load_backbone_weighs(self, weights):
-        miss_state_dict = self.backbones.load_state_dict(weights, strict=False)
-        print(miss_state_dict)
-
-    def forward(self, x):
+    def forward(self, x, targets=None):
         c3, c4, c5 = self.backbones(x)
         p3, p4, p5, p6, p7 = self.neck([c3, c4, c5])
         out = self.head([p3, p4, p5, p6, p7])
-        return out
+        ret = dict()
+        if self.training:
+            assert targets is not None
+            cls_outputs, reg_outputs, anchors = out
+            cls_loss, iou_loss, match_num = self.loss(cls_outputs, reg_outputs, anchors, targets)
+            ret['cls_loss'] = cls_loss
+            ret['iou_loss'] = iou_loss
+            ret['match_num'] = match_num
+        else:
+            _, _, h, w = x.shape
+            for pred in out:
+                pred[:, [0, 2]] = pred[:, [0, 2]].clamp(min=0, max=w)
+                pred[:, [1, 3]] = pred[:, [0, 2]].clamp(min=0, max=h)
+            predicts = non_max_suppression(out,
+                                           conf_thresh=self.cfg['conf_thresh'],
+                                           iou_thresh=self.cfg['nms_iou_thresh'],
+                                           max_det=self.cfg['max_det']
+                                           )
+            ret['predicts'] = predicts
+        return ret
 
-#
 # if __name__ == '__main__':
 #     input_tensor = torch.rand(size=(4, 3, 640, 640)).float()
 #     net = RetinaNet(backbone="resnet18")

@@ -1,152 +1,155 @@
+from typing import List, Any
+
 import torch
-from commons.boxs_utils import box_iou
-from utils.retinanet import BoxCoder
+from utils.boxs_utils import box_iou
 from losses.commons import IOULoss
 
 
-def get_gpu_num():
-    import os
-    g_num = len(os.environ['CUDA_VISIBLE_DEVICES'].split(',')) if 'CUDA_VISIBLE_DEVICES' in os.environ else 1
-    return g_num
+class BoxCoder(object):
+    def __init__(self, weights=None):
+        super(BoxCoder, self).__init__()
+        if weights is None:
+            weights = [0.1, 0.1, 0.2, 0.2]
+        self.weights = torch.tensor(data=weights, requires_grad=False)
 
-
-def reduce_sum(tensor):
-    import torch.distributed as dist
-    g_num = get_gpu_num()
-    if g_num <= 1:
-        return tensor
-    tensor = tensor.clone()
-    dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-    return tensor
-
-
-def smooth_l1_loss(predicts, target, beta=1. / 9):
-    """
-    very similar to the smooth_l1_loss from pytorch, but with
-    the extra beta parameter
-    """
-    n = torch.abs(predicts - target)
-    cond = n < beta
-    loss = torch.where(cond, 0.5 * n ** 2 / beta, n - 0.5 * beta)
-    return loss
-
-
-class RetinaLossBuilder(object):
-    def __init__(self, iou_thresh=0.5, ignore_iou=0.4):
-        self.iou_thresh = iou_thresh
-        self.ignore_iou = ignore_iou
-
-    @torch.no_grad()
-    def __call__(self, bs, anchors, targets):
+    def encoder(self, anchors, gt_boxes):
         """
-        :param bs: batch_size
-        :param anchors: list(anchor) anchor [all, 4] (x1,y1,x2,y2)
-        :param targets: [gt_num, 7] (batch_id,weights,label_id,x1,y1,x2,y2)
+        :param gt_boxes:[box_num, 4]
+        :param anchors: [box_num, 4]
         :return:
         """
-        # [all,4] (x1,y1,x2,y2)
-        all_anchors = torch.cat(anchors, dim=0)
-        flag_list = list()
-        targets_list = list()
-        for bi in range(bs):
-            flag = torch.ones(size=(len(all_anchors),), device=all_anchors.device)
-            # flag = all_anchors.new_ones(size=(len(all_anchors),))
-            # [gt_num, 6] (weights,label_idx,x1,y1,x2,y2)
-            batch_targets = targets[targets[:, 0] == bi, 1:]
-            if len(batch_targets) == 0:
-                flag_list.append(flag * 0.)
-                targets_list.append(torch.Tensor())
-                continue
-            flag *= -1.
-            batch_box = batch_targets[:, 2:]
-            # [all,gt_num]
-            anchor_gt_iou = box_iou(all_anchors, batch_box)
+        if self.weights.device != anchors.device:
+            self.weights = self.weights.to(anchors.device)
+        anchors_wh = anchors[..., [2, 3]] - anchors[..., [0, 1]]
+        anchors_xy = anchors[..., [0, 1]] + 0.5 * anchors_wh
+        gt_wh = (gt_boxes[..., [2, 3]] - gt_boxes[..., [0, 1]]).clamp(min=1.0)
+        gt_xy = gt_boxes[..., [0, 1]] + 0.5 * gt_wh
+        delta_xy = (gt_xy - anchors_xy) / anchors_wh
+        delta_wh = (gt_wh / anchors_wh).log()
 
-            iou_val, gt_idx = anchor_gt_iou.max(dim=1)
-            pos_idx = iou_val >= self.iou_thresh
-            neg_idx = iou_val < self.ignore_iou
-            flag[pos_idx] = 1.
-            flag[neg_idx] = 0.
-            flag_list.append(flag)
-            gt_targets = batch_targets[gt_idx, :]
-            targets_list.append(gt_targets)
-        return flag_list, targets_list, all_anchors
+        delta_targets = torch.cat([delta_xy, delta_wh], dim=-1) / self.weights
+
+        return delta_targets
+
+    def decoder(self, predicts, anchors):
+        """
+        :param predicts: [anchor_num, 4] or [bs, anchor_num, 4]
+        :param anchors: [anchor_num, 4]
+        :return: [anchor_num, 4] (x1,y1,x2,y2)
+        """
+        if self.weights.device != anchors.device:
+            self.weights = self.weights.to(anchors.device)
+        anchors_wh = anchors[:, [2, 3]] - anchors[:, [0, 1]]
+        anchors_xy = anchors[:, [0, 1]] + 0.5 * anchors_wh
+        scale_reg = predicts * self.weights
+        scale_reg[..., :2] = anchors_xy + scale_reg[..., :2] * anchors_wh
+        scale_reg[..., 2:] = scale_reg[..., 2:].exp() * anchors_wh
+        scale_reg[..., :2] -= (0.5 * scale_reg[..., 2:])
+        scale_reg[..., 2:] = scale_reg[..., :2] + scale_reg[..., 2:]
+
+        return scale_reg
+
+
+class Matcher(object):
+    BELOW_LOW_THRESHOLD = -1
+    BETWEEN_THRESHOLDS = -2
+
+    def __init__(self, iou_thresh=0.5, ignore_iou=0.4, allow_low_quality_matches=True):
+        self.iou_thresh = iou_thresh
+        self.ignore_iou = ignore_iou
+        self.allow_low_quality_matches = allow_low_quality_matches
+
+    @torch.no_grad()
+    def __call__(self, anchors, gt_boxes):
+        ret = list()
+        for idx, gt_box in enumerate(gt_boxes):
+            if len(gt_box) == 0:
+                continue
+            ori_match = None
+            gt_anchor_iou = box_iou(gt_box[..., 1:], anchors)
+            match_val, match_idx = gt_anchor_iou.max(dim=0)
+            if self.allow_low_quality_matches:
+                ori_match = match_idx.clone()
+            match_idx[match_val < self.ignore_iou] = self.BELOW_LOW_THRESHOLD
+            match_idx[(match_val >= self.ignore_iou) & (match_val < self.iou_thresh)] = self.BETWEEN_THRESHOLDS
+            if self.allow_low_quality_matches:
+                self.set_low_quality_matches_(match_idx, ori_match, gt_anchor_iou)
+            ret.append((idx, match_idx))
+        return ret
+
+    @staticmethod
+    def set_low_quality_matches_(matches, ori_matches, gt_anchor_iou):
+        highest_quality_foreach_gt, _ = gt_anchor_iou.max(dim=1)
+        # [num,2](gt_idx,anchor_idx)
+        gt_pred_pairs_of_highest_quality = torch.nonzero(
+            gt_anchor_iou == highest_quality_foreach_gt[:, None], as_tuple=False
+        )
+        pred_inds_to_update = gt_pred_pairs_of_highest_quality[:, 1]
+        matches[pred_inds_to_update] = ori_matches[pred_inds_to_update]
+
+
+def focal_loss(predicts, targets, alpha=0.25, gamma=2.0):
+    pos_loss = -alpha * targets * (
+            (1 - predicts) ** gamma) * predicts.log()
+    neg_loss = - (1 - alpha) * (1. - targets) * (predicts ** gamma) * (
+        (1 - predicts).log())
+    return pos_loss + neg_loss
 
 
 class RetinaLoss(object):
-    def __init__(self, iou_thresh=0.5, ignore_thresh=0.4, alpha=0.25, gamma=2.0, iou_type="giou"):
+    def __init__(self, iou_thresh=0.5,
+                 ignore_thresh=0.4,
+                 alpha=0.25,
+                 gamma=2.0,
+                 iou_type="giou",
+                 allow_low_quality_matches=False):
         self.iou_thresh = iou_thresh
         self.ignore_thresh = ignore_thresh
         self.alpha = alpha
-        self.gama = gamma
-        self.builder = RetinaLossBuilder(iou_thresh, ignore_thresh)
+        self.gamma = gamma
+        self.mather = Matcher(iou_thresh, ignore_thresh, allow_low_quality_matches)
         self.box_coder = BoxCoder()
         self.iou_loss = IOULoss(iou_type=iou_type, coord_type="xyxy")
 
     def __call__(self, cls_predicts, reg_predicts, anchors, targets):
         """
-        :param cls_predicts: list(cls_predict) cls_predict[bs,all,num_cls]
-        :param reg_predicts: list(reg_predict) reg_predict[bs,all,4]
-        :param anchors: list(anchor) anchor[all,4]
-        :param targets: [gt_num,7] (batch_id,weights,label_id,x1,y1,x2,y2)
-        :return:
         """
-        for i in range(len(cls_predicts)):
-            if cls_predicts[i].dtype == torch.float16:
-                cls_predicts[i] = cls_predicts[i].float()
-        device = cls_predicts[0].device
-        bs = cls_predicts[0].shape[0]
-        flags, gt_targets, all_anchors = self.builder(bs, anchors, targets)
-        cls_loss_list = list()
-        reg_loss_list = list()
+        cls_predicts = torch.cat([item for item in cls_predicts], dim=1)
+        reg_predicts = torch.cat([item for item in reg_predicts], dim=1)
+        all_anchors = torch.cat([item for item in anchors])
+        gt_boxes = targets['target'].split(targets['batch_len'])
+        match_ret = self.mather(all_anchors, gt_boxes)
+        all_batch_idx = list()
+        all_anchor_idx = list()
+        all_cls_target = list()
+        all_box_target = list()
+        for bid, match in match_ret:
+            positive_anchor_idx = (match >= 0).nonzero(as_tuple=False).squeeze(-1)
+            negative_anchor_idx = (match == self.mather.BELOW_LOW_THRESHOLD).nonzero(as_tuple=False).squeeze(-1)
+            gt_idx = match[positive_anchor_idx]
+            target_label = gt_boxes[bid][gt_idx, 0].long()
+            target_box = gt_boxes[bid][gt_idx, 1:]
+            cls_target = torch.zeros(size=(len(positive_anchor_idx) + len(negative_anchor_idx),
+                                           cls_predicts.shape[-1]),
+                                     device=cls_predicts.device)
+            cls_target[range(len(positive_anchor_idx)), target_label] = 1.
+            all_cls_target.append(cls_target)
+            all_box_target.append(target_box)
+            all_batch_idx.append([bid] * len(positive_anchor_idx))
+            all_batch_idx.append([bid] * len(negative_anchor_idx))
+            all_anchor_idx.append(positive_anchor_idx)
+            all_anchor_idx.append(negative_anchor_idx)
+        all_cls_target = torch.cat(all_cls_target, dim=0)
+        all_box_target = torch.cat(all_box_target, dim=0)
+        all_cls_predict = cls_predicts[sum(all_batch_idx, []),
+                                       torch.cat(all_anchor_idx)]
+        if all_cls_predict.dtype == torch.float16:
+            all_cls_predict = all_cls_predict.float()
+        all_cls_predict = all_cls_predict.sigmoid()
+        cls_loss = focal_loss(all_cls_predict, all_cls_target, self.alpha, self.gamma).sum()
+        all_reg_predicts = reg_predicts[sum(all_batch_idx[::2], []), torch.cat(all_anchor_idx[::2])]
+        predict_box = self.box_coder.decoder(all_reg_predicts, all_anchors[torch.cat(all_anchor_idx[::2])])
+        iou_loss = self.iou_loss(predict_box, all_box_target).sum()
 
-        pos_num_sum = 0.
-        for bi in range(bs):
-            batch_cls_predict = torch.cat([cls_item[bi] for cls_item in cls_predicts], dim=0) \
-                .sigmoid() \
-                .clamp(1e-6, 1 - 1e-6)
-            batch_reg_predict = torch.cat([reg_item[bi] for reg_item in reg_predicts], dim=0)
-            flag = flags[bi]
-            gt = gt_targets[bi]
-            pos_idx = (flag == 1).nonzero(as_tuple=False).squeeze(1)
-            pos_num = len(pos_idx)
-            if pos_num == 0:
-                neg_cls_loss = -(1 - self.alpha) * batch_cls_predict ** self.gama * ((1 - batch_cls_predict).log())
-                cls_loss_list.append(neg_cls_loss.sum())
-                continue
-            pos_num_sum += pos_num
-            neg_idx = (flag == 0).nonzero(as_tuple=False).squeeze(1)
-            valid_idx = torch.cat([pos_idx, neg_idx])
-            valid_cls_predicts = batch_cls_predict[valid_idx, :]
-            cls_targets = torch.zeros(size=valid_cls_predicts.shape, device=device)
-            cls_targets[range(pos_num), gt[pos_idx, 1].long()] = 1.
-
-            mix_weights = torch.ones(size=valid_cls_predicts.shape, device=device)
-            mix_weights[range(pos_num), gt[pos_idx, 1].long()] = gt[pos_idx, 0]
-            pos_loss = -self.alpha * cls_targets * ((1 - valid_cls_predicts) ** self.gama) * valid_cls_predicts.log()
-            pos_loss = mix_weights * pos_loss
-            neg_loss = -(1 - self.alpha) * (1. - cls_targets) * (valid_cls_predicts ** self.gama) * (
-                (1 - valid_cls_predicts).log())
-            cls_loss = (pos_loss + neg_loss).sum()
-            cls_loss_list.append(cls_loss)
-
-            valid_reg_predicts = batch_reg_predict[pos_idx, :]
-            predict_box = self.box_coder.decoder(valid_reg_predicts, all_anchors[pos_idx])
-            gt_bbox = gt[pos_idx, 2:]
-            # delta_targets = self.box_coder.encoder(all_anchors[pos_idx], gt_bbox)
-            reg_loss = self.iou_loss(predict_box, gt_bbox)
-            reg_loss * gt[pos_idx, 0]
-            reg_loss_list.append(reg_loss.sum())
-
-        cls_loss_sum = torch.stack(cls_loss_list).sum()
-        # pos_num_sum = reduce_sum(torch.tensor(data=pos_num_sum, device=device).float()).item() / get_gpu_num()
-        if pos_num_sum == 0:
-            total_loss = cls_loss_sum
-            return total_loss, torch.stack([cls_loss_sum, torch.tensor(data=0., device=device)]).detach(), pos_num_sum
-        reg_loss_sum = torch.stack(reg_loss_list).sum()
-
-        cls_loss_mean = cls_loss_sum / pos_num_sum
-        reg_loss_mean = reg_loss_sum / pos_num_sum
-        total_loss = cls_loss_mean + reg_loss_mean
-
-        return total_loss, torch.stack([cls_loss_mean, reg_loss_mean]).detach(), pos_num_sum
+        num_of_positive = len(predict_box)
+        return cls_loss / num_of_positive, iou_loss / num_of_positive, num_of_positive

@@ -180,9 +180,9 @@ class COCODataSets(Dataset):
         basic_transform = Compose(
             transforms=[
                 color_gitter,
-                RandCrop(min_thresh=0.6, max_thresh=1.0).reset(p=0.5),
+                RandCrop(min_thresh=0.6, max_thresh=1.0).reset(p=0.2),
                 RandScaleToMax(max_threshes=[self.max_thresh]),
-                RandPerspective(degree=self.aug_cfg['degree'])
+                RandPerspective(degree=self.aug_cfg['degree'], scale=(0.6, 1.2))
             ]
         )
 
@@ -203,9 +203,9 @@ class COCODataSets(Dataset):
         augment_transform = Compose(
             transforms=[
                 OneOf(transforms=[
-                    (0.2, basic_transform),
+                    (0.6, basic_transform),
                     (0.0, mix_up),
-                    (0.8, mosaic)
+                    (0.4, mosaic)
                 ]),
                 LRFlip().reset(p=0.5)
             ]
@@ -216,7 +216,6 @@ class COCODataSets(Dataset):
             self.transform = augment_transform
         else:
             self.transform = std_transform
-
 
 # if __name__ == '__main__':
 #     from torch.utils.data.dataloader import DataLoader

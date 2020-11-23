@@ -10,6 +10,7 @@ from tqdm import tqdm
 from nets.retinanet import RetinaNet
 from datasets.coco import coco_ids, rgb_mean, rgb_std
 from utils.augmentations import RandScaleToMax
+from utils.model_utils import AverageLogger
 
 
 def coco_eavl(anno_path="/home/huffman/data/annotations/instances_val2017.json", pred_path="predicts.json"):
@@ -26,7 +27,7 @@ def coco_eavl(anno_path="/home/huffman/data/annotations/instances_val2017.json",
 
 
 @torch.no_grad()
-def eval_model(weight_path="weights/retinanet_resnet18_last.pth", device="cuda:4"):
+def eval_model(weight_path="weights/retinanet_resnet50_last.pth", device="cuda:4"):
     from pycocotools.coco import COCO
     device = torch.device(device)
     with open("config/retina.yaml", 'r') as rf:
@@ -34,11 +35,12 @@ def eval_model(weight_path="weights/retinanet_resnet18_last.pth", device="cuda:4
     net = RetinaNet(**{**cfg['model'], 'pretrained': False})
     net.load_state_dict(torch.load(weight_path, map_location="cpu")['ema'])
     net.to(device)
-    net.eval()
+    net.eval().half()
     data_cfg = cfg['data']
     basic_transform = RandScaleToMax(max_threshes=[data_cfg['max_thresh']])
     coco = COCO(data_cfg['val_annotation_path'])
     coco_predict_list = list()
+    time_logger = AverageLogger()
     pbar = tqdm(coco.imgs.keys())
     for img_id in pbar:
         file_name = coco.imgs[img_id]['file_name']
@@ -49,10 +51,12 @@ def eval_model(weight_path="weights/retinanet_resnet18_last.pth", device="cuda:4
                                                               max_thresh=data_cfg['max_thresh'],
                                                               border_val=(103, 116, 123))
         img_inp = (img[:, :, ::-1] / 255.0 - np.array(rgb_mean)) / np.array(rgb_std)
-        img_inp = torch.from_numpy(img_inp).unsqueeze(0).permute(0, 3, 1, 2).contiguous().float().to(device)
+        img_inp = torch.from_numpy(img_inp).unsqueeze(0).permute(0, 3, 1, 2).contiguous().float().to(device).half()
         tic = time.time()
         predict = net(img_inp)["predicts"][0]
-        pbar.set_description("fps:{:4.2f}".format(1/(time.time()-tic)))
+        duration = time.time() - tic
+        time_logger.update(duration)
+        pbar.set_description("fps:{:4.2f}".format(1/time_logger.avg()))
         if predict is None:
             continue
         predict[:, [0, 2]] = ((predict[:, [0, 2]] - left) / ratio).clamp(min=0, max=w)
